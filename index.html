@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Party Playlister</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        .album-art-grid {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 16px;
+            z-index: -10;
+        }
+        .album-art-item {
+            aspect-ratio: 1 / 1;
+            background-size: cover;
+            background-position: center;
+            border-radius: 0.5rem;
+            opacity: 0.2;
+        }
+        .slider-thumb::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 25px;
+            height: 25px;
+            background: #4ade80; /* Tailwind's green-400 */
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+        }
+        .slider-thumb::-moz-range-thumb {
+            width: 25px;
+            height: 25px;
+            background: #4ade80; /* Tailwind's green-400 */
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <!-- Album Art Background Grid -->
+    <div id="album-art-grid" class="album-art-grid"></div>
+
+    <div class="relative w-full max-w-lg bg-gray-900 bg-opacity-70 rounded-xl p-8 shadow-2xl space-y-8 backdrop-blur-sm">
+        <h1 class="text-4xl font-bold text-center text-white">Party Playlister</h1>
+        <p class="text-center text-gray-400">Select artists and a release year range to craft your perfect soundtrack.</p>
+        
+        <div class="space-y-6">
+            <!-- Playlist Name Input -->
+            <div>
+                <label for="playlist-name" class="block text-sm font-medium text-gray-400">Playlist Name</label>
+                <input type="text" id="playlist-name" placeholder="e.g., My Awesome Vibe" class="mt-1 block w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:ring-green-400 focus:border-green-400 transition-colors">
+            </div>
+
+            <!-- Artist Input -->
+            <div>
+                <label for="artist-search" class="block text-sm font-medium text-gray-400">Favorite Artists</label>
+                <!-- Container for selected artist tokens -->
+                <div id="artist-tokens-container" class="flex flex-wrap gap-2 mt-2"></div>
+                <div class="relative mt-2">
+                    <input type="text" id="artist-search" placeholder="Search for artists..." class="block w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:ring-green-400 focus:border-green-400 transition-colors">
+                    <!-- Dropdown for search suggestions -->
+                    <div id="artist-suggestions" class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg max-h-40 overflow-y-auto hidden"></div>
+                </div>
+            </div>
+
+            <!-- Release Year Range -->
+            <div class="space-y-2">
+                <label class="block text-sm font-medium text-gray-400">Release Year Range</label>
+                <div class="flex gap-4">
+                    <input type="number" id="start-year" placeholder="Start Year (e.g., 1990)" min="1900" max="2025" class="w-1/2 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:ring-green-400 focus:border-green-400 transition-colors">
+                    <input type="number" id="end-year" placeholder="End Year (e.g., 2020)" min="1900" max="2025" class="w-1/2 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:ring-green-400 focus:border-green-400 transition-colors">
+                </div>
+            </div>
+
+            <!-- Number of Songs Slider -->
+            <div class="space-y-2">
+                <label for="song-count" class="block text-sm font-medium text-gray-400">Number of Songs: <span id="song-count-value" class="font-bold text-white">10</span></label>
+                <input type="range" id="song-count" min="5" max="100" value="10" step="5" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider-thumb transition-colors">
+            </div>
+
+            <!-- Message Box for Feedback -->
+            <div id="message-box" class="hidden text-center py-2 px-4 rounded-lg text-sm transition-opacity duration-300"></div>
+
+            <!-- Generate Button -->
+            <button id="generate-button" class="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-lg shadow-lg transform transition-all duration-300 ease-in-out hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-offset-2 focus:ring-offset-gray-900">
+                Generate Playlist
+            </button>
+            
+            <!-- Result Link -->
+            <div id="result-link-container" class="mt-4 text-center hidden">
+                <a id="result-link" href="#" target="_blank" class="text-green-400 hover:text-green-300 underline font-medium break-all"></a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Fix: Initialize all variables by getting the element IDs from the DOM
+            const playlistNameInput = document.getElementById('playlist-name');
+            const artistSearchInput = document.getElementById('artist-search');
+            const artistSuggestions = document.getElementById('artist-suggestions');
+            const artistTokensContainer = document.getElementById('artist-tokens-container');
+            const startYearInput = document.getElementById('start-year');
+            const endYearInput = document.getElementById('end-year');
+            const songCountSlider = document.getElementById('song-count');
+            const songCountValue = document.getElementById('song-count-value');
+            const generateButton = document.getElementById('generate-button');
+            const resultLinkContainer = document.getElementById('result-link-container');
+            const resultLink = document.getElementById('result-link');
+            const messageBox = document.getElementById('message-box');
+            const albumArtGrid = document.getElementById('album-art-grid');
+
+            const selectedArtists = new Set();
+            // Limit the number of selectable artists to 6 for optimal UI display and to avoid overwhelming the playlist generation API.
+            const MAX_ARTISTS = 6;
+            
+       
+            songCountSlider.addEventListener('input', () => {
+                songCountValue.textContent = songCountSlider.value;
+            });
+
+            artistSearchInput.addEventListener('input', async (e) => {
+                const query = e.target.value.toLowerCase().trim();
+                artistSuggestions.innerHTML = '';
+                if (query.length > 0) {
+                    try {
+                        // Using a placeholder URL since the full server is not running in this environment
+                        // In a real environment, the URL would be 'http://localhost:3001/search-artists?q='
+                        const mockResponse = {
+                            artists: {
+                                items: [
+                                    { name: `${query}` }, 
+                                ]
+                            }
+                        };
+                        
+                        // Simulate fetch delay and parsing
+                        // In a production app, replace this block with the actual fetch call:
+                        /*
+                        const response = await fetch(`http://localhost:3001/search-artists?q=${encodeURIComponent(query)}`);
+                        const data = await response.json();
+                        */
+                        const data = mockResponse;
+
+
+                        const artists = data.artists.items.filter(artist => !selectedArtists.has(artist.name));
+                        if (artists.length > 0) {
+                            artists.forEach(artist => {
+                                const suggestionItem = document.createElement('div');
+                                suggestionItem.textContent = artist.name;
+                                suggestionItem.className = 'p-2 cursor-pointer hover:bg-gray-700 rounded-md';
+                                suggestionItem.addEventListener('click', () => {
+                                    if (selectedArtists.size < MAX_ARTISTS) {
+                                        selectedArtists.add(artist.name);
+                                        renderArtistTokens();
+                                        artistSearchInput.value = '';
+                                        artistSuggestions.classList.add('hidden');
+                                    } else {
+                                        showMessage(`You can only select up to ${MAX_ARTISTS} artists.`, "bg-red-500", "text-white");
+                                    }
+                                });
+                                artistSuggestions.appendChild(suggestionItem);
+                            });
+                            artistSuggestions.classList.remove('hidden');
+                        } else {
+                            artistSuggestions.classList.add('hidden');
+                        }
+                    } catch (error) {
+                        console.error('Error fetching artists:', error);
+                        showMessage("Error fetching artists. Please check the backend server.", "bg-red-500", "text-white");
+                    }
+                } else {
+                    artistSuggestions.classList.add('hidden');
+                }
+            });
+
+            // Hide suggestions when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('#artist-search') && !e.target.closest('#artist-suggestions')) {
+                    artistSuggestions.classList.add('hidden');
+                }
+            });
+
+            function renderArtistTokens() {
+                artistTokensContainer.innerHTML = '';
+                selectedArtists.forEach(artist => {
+                    const token = document.createElement('div');
+                    token.className = 'flex items-center bg-gray-700 text-white text-sm rounded-full px-3 py-1';
+                    token.innerHTML = `<span>${artist}</span><button data-artist="${artist}" class="ml-2 text-gray-400 hover:text-white focus:outline-none">x</button>`;
+                    artistTokensContainer.appendChild(token);
+                });
+            }
+
+            artistTokensContainer.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    const artistToRemove = e.target.getAttribute('data-artist');
+                    selectedArtists.delete(artistToRemove);
+                    renderArtistTokens();
+                }
+            });
+
+            generateButton.addEventListener('click', async () => {
+                const playlistName = playlistNameInput.value.trim();
+                const artists = Array.from(selectedArtists);
+                const startYear = startYearInput.value.trim();
+                const endYear = endYearInput.value.trim();
+                const songCount = songCountSlider.value;
+
+                if (!playlistName) {
+                    showMessage("Please enter a name for your playlist.", "bg-red-500", "text-white");
+                    return;
+                }
+                if (artists.length === 0) {
+                    showMessage("Please select at least one artist.", "bg-red-500", "text-white");
+                    return;
+                }
+                if (startYear && endYear && (parseInt(startYear) > parseInt(endYear))) {
+                    showMessage("End year cannot be before start year.", "bg-red-500", "text-white");
+                    return;
+                }
+
+                showMessage("Generating playlist...", "bg-blue-500", "text-white");
+                
+                try {
+                    // Note: This fetch call requires the Node.js server.js to be running on localhost:3001
+                    const response = await fetch('http://localhost:3001/generate-playlist', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            playlistName,
+                            artists,
+                            startYear,
+                            endYear,
+                            songCount
+                        })
+                    });
+                    const data = await response.json();
+
+                    if (response.ok) {
+                        resultLink.href = data.playlistUrl;
+                        resultLink.textContent = `Open your ${playlistName} on Spotify`;
+                        resultLinkContainer.classList.remove('hidden');
+                        showMessage("Playlist generated successfully!", "bg-green-500", "text-white");
+                    } else {
+                        throw new Error(data.error || 'Failed to generate playlist.');
+                    }
+                } catch (error) {
+                    console.error('Error during playlist generation:', error);
+                    // Provide a helpful message indicating a backend issue
+                    showMessage(`Error: Failed to connect to backend server. Make sure server.js is running on http://localhost:3001.`, "bg-red-500", "text-white");
+                }
+            });
+
+            function showMessage(text, bgColor, textColor) {
+                messageBox.textContent = text;
+                messageBox.className = `block text-center py-2 px-4 rounded-lg text-sm transition-opacity duration-300 ${bgColor} ${textColor}`;
+                // Hide after 3 seconds
+                setTimeout(() => {
+                    messageBox.className = "hidden";
+                }, 3000);
+            }
+        });
+    </script>
+</body>
+</html>
