@@ -6,22 +6,15 @@ const querystring = require('querystring');
 const app = express();
 const port = 8000;
 
-// --- CONFIGURATION ---
-// 1. Fill these in from your Spotify Dashboard
 const CLIENT_ID = 'a0e5a70475c642a4a68021b0c9dccb52';
 const CLIENT_SECRET = '38e19ec90c724ae7b0c7b0ce4fd86fc5';
 const REDIRECT_URI = 'http://127.0.0.1:8000/callback'; 
 
-// 2. This is the token you get from Step 4. 
-// Initially, leave it empty. Run the server, go to http://localhost:3001/login.
 let SERVICE_REFRESH_TOKEN = 'AQCpNz1wbIaBNxbihrbdlHJvV_4hzhtiaqDtAs44krmb0EBAnTEidlyDnH6RqqfJt-Rp4BuPrDxFGvzwJ53zktNn_kUrGouAopAxTIGZlzkAh8dI68dwpT0vtOjRb_asbvE'; 
 
 app.use(cors());
 app.use(express.json());
 
-/**
- * HELPER: Get a fresh access token using the Refresh Token
- */
 async function getAccessToken() {
     if (!SERVICE_REFRESH_TOKEN) {
         throw new Error("Missing SERVICE_REFRESH_TOKEN. Visit /login first.");
@@ -41,9 +34,7 @@ async function getAccessToken() {
     return data.access_token;
 }
 
-/**
- * ONE-TIME SETUP: Visit http://localhost:3001/login to get your token
- */
+
 app.get('/login', (req, res) => {
     const scope = 'playlist-modify-public playlist-modify-private';
     res.redirect('https://accounts.spotify.com/authorize?' +
@@ -73,7 +64,6 @@ app.get('/callback', async (req, res) => {
     res.send(`<h1>Copy this Refresh Token:</h1><p style="word-break:break-all; background:#eee; padding:10px;">${data.refresh_token}</p><p>Paste this into SERVICE_REFRESH_TOKEN in server.js and restart the server.</p>`);
 });
 
-// --- API ENDPOINTS ---
 
 app.get('/api/search-artists', async (req, res) => {
     try {
@@ -97,7 +87,6 @@ app.post('/api/generate', async (req, res) => {
         
         let allTracks = [];
         for (const artist of artists) {
-            // If years are provided, add them to the query
             let yearFilter = (startYear && endYear) ? ` year:${startYear}-${endYear}` : "";
             const query = `artist:"${artist}"${yearFilter}`;
             
