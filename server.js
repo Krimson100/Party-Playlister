@@ -14,7 +14,7 @@ const REDIRECT_URI = 'http://127.0.0.1:8000/callback';
 
 // 2. This is the token you get from Step 4. 
 // Initially, leave it empty. Run the server, go to http://localhost:3001/login.
-let SERVICE_REFRESH_TOKEN = ''; 
+let SERVICE_REFRESH_TOKEN = 'AQCpNz1wbIaBNxbihrbdlHJvV_4hzhtiaqDtAs44krmb0EBAnTEidlyDnH6RqqfJt-Rp4BuPrDxFGvzwJ53zktNn_kUrGouAopAxTIGZlzkAh8dI68dwpT0vtOjRb_asbvE'; 
 
 app.use(cors());
 app.use(express.json());

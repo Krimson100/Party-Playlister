@@ -239,7 +239,7 @@
                 
                 try {
                     // Note: This fetch call requires the Node.js server.js to be running on localhost:3001
-                    const response = await fetch('http://localhost:3001/generate-playlist', {
+                    const response = await fetch('http://127.0.0.1:8000/generate-playlist', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -265,7 +265,7 @@
                 } catch (error) {
                     console.error('Error during playlist generation:', error);
                     // Provide a helpful message indicating a backend issue
-                    showMessage(`Error: Failed to connect to backend server. Make sure server.js is running on http://localhost:3001.`, "bg-red-500", "text-white");
+                    showMessage(`Error: Failed to connect to backend server. Make sure server.js is running on http://127.0.0.1:8000.`, "bg-red-500", "text-white");
                 }
             });
 
