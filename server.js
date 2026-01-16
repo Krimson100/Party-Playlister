@@ -299,6 +299,11 @@ app.post('/api/generate', async (req, res) => {
     }
 });
 
+app.use(express.static('.'));
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/index.html');
+});
+
 app.listen(port, () => {
     console.log(`✅ Server running at http://localhost:${port}`);
     console.log(`📝 Visit http://localhost:${port}/login to authenticate`);
