@@ -30,7 +30,29 @@
             background-position: center;
             border-radius: 0.5rem;
             opacity: 0.2;
+            animation: float 20s ease-in-out infinite;
+            transition: transform 0.3s ease, opacity 0.3s ease;
         }
+        .album-art-item:hover {
+            opacity: 0.4;
+            transform: scale(1.05);
+        }
+        
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px) rotate(0deg);
+            }
+            25% {
+                transform: translateY(-15px) rotate(1deg);
+            }
+            50% {
+                transform: translateY(0px) rotate(-1deg);
+            }
+            75% {
+                transform: translateY(15px) rotate(0.5deg);
+            }
+        }
+        
         .slider-thumb {
             appearance: none;
             width: 100%;
@@ -61,8 +83,45 @@
             <h1 class="text-4xl font-black tracking-tight text-white mb-2">Party Playlister</h1>
             <p class="text-gray-400">Select artists and a year range for the perfect vibe.</p>
         </div>
-        
-        <div class="space-y-6">
+
+        <!-- Mode Indicator & Login Section -->
+        <div id="mode-section">
+            <!-- Demo Mode Banner -->
+            <div id="demo-mode-banner" class="hidden bg-yellow-500/20 border border-yellow-500/30 rounded-2xl p-4 mb-4">
+                <div class="flex items-start gap-3">
+                    <span class="text-2xl">🎵</span>
+                    <div class="flex-1">
+                        <p class="text-yellow-300 font-bold text-sm mb-1">Demo Mode</p>
+                        <p class="text-yellow-200/80 text-xs mb-3">You're trying it out! Playlists will be created in the demo account.</p>
+                        <button id="login-from-demo" class="bg-green-500 hover:bg-green-600 text-white text-xs font-bold px-4 py-2 rounded-lg transition-all">
+                            Login to Save to Your Spotify
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Mode Indicator -->
+            <div id="user-mode-banner" class="hidden bg-green-500/20 border border-green-500/30 rounded-2xl p-3 mb-4">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-2">
+                        <span class="text-green-400 text-xl">✓</span>
+                        <span class="text-green-300 text-sm font-bold">Connected to Your Spotify</span>
+                    </div>
+                    <button id="logout-button" class="text-red-400 hover:text-red-300 text-xs font-medium">Logout</button>
+                </div>
+            </div>
+
+            <!-- No Auth Available -->
+            <div id="no-auth-banner" class="hidden bg-gray-800 border border-gray-700 rounded-2xl p-6 text-center space-y-4">
+                <p class="text-gray-300">Connect your Spotify account to create playlists</p>
+                <button id="login-button" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl transition-all">
+                    🎵 Login with Spotify
+                </button>
+            </div>
+        </div>
+
+        <!-- Main App -->
+        <div id="app-section" class="space-y-6">
             <!-- Playlist Name Input -->
             <div>
                 <label for="playlist-name" class="block text-xs font-bold uppercase tracking-widest text-gray-500 mb-2">Playlist Name</label>
@@ -109,7 +168,7 @@
             
             <!-- Result Area -->
             <div id="result-link-container" class="mt-4 p-6 bg-gray-800 rounded-2xl border border-green-500/30 text-center hidden">
-                <p class="text-gray-400 text-sm mb-2">Success! Your playlist is ready:</p>
+                <p id="result-mode-text" class="text-gray-400 text-xs mb-2"></p>
                 <a id="result-link" href="#" target="_blank" class="text-green-400 hover:text-green-300 text-lg font-bold underline decoration-2 underline-offset-4">Open on Spotify</a>
             </div>
         </div>
@@ -117,9 +176,15 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // Configuration for your backend
-            const BACKEND_URL = 'http://localhost:5500/api';
+            const BACKEND_URL = 'http://localhost:5500';
 
+            const demoModeBanner = document.getElementById('demo-mode-banner');
+            const userModeBanner = document.getElementById('user-mode-banner');
+            const noAuthBanner = document.getElementById('no-auth-banner');
+            const loginButton = document.getElementById('login-button');
+            const loginFromDemo = document.getElementById('login-from-demo');
+            const logoutButton = document.getElementById('logout-button');
+            const appSection = document.getElementById('app-section');
             const playlistNameInput = document.getElementById('playlist-name');
             const artistSearchInput = document.getElementById('artist-search');
             const artistSuggestions = document.getElementById('artist-suggestions');
@@ -131,33 +196,159 @@
             const generateButton = document.getElementById('generate-button');
             const resultLinkContainer = document.getElementById('result-link-container');
             const resultLink = document.getElementById('result-link');
+            const resultModeText = document.getElementById('result-mode-text');
             const messageBox = document.getElementById('message-box');
             const albumArtGrid = document.getElementById('album-art-grid');
 
             const selectedArtists = new Set();
             const MAX_ARTISTS = 6;
+            let currentMode = 'none';
             
-            // Placeholder background art
-            for(let i=0; i<20; i++) {
-                const item = document.createElement('div');
-                item.className = 'album-art-item';
-                item.style.backgroundImage = `url('https://picsum.photos/seed/${i+10}/200')`;
-                albumArtGrid.appendChild(item);
+            // Fetch and populate real album art from popular artists
+            async function populateAlbumArt() {
+                const popularArtists = [
+                    'Taylor Swift', 'Drake', 'The Weeknd', 'Ariana Grande', 'Ed Sheeran',
+                    'Billie Eilish', 'Post Malone', 'Dua Lipa', 'Travis Scott', 'SZA',
+                    'Bad Bunny', 'Harry Styles', 'Olivia Rodrigo', 'Doja Cat', 'Kendrick Lamar',
+                    'Bruno Mars', 'Rihanna', 'Beyoncé', 'Justin Bieber', 'Adele',
+                    'Coldplay', 'Imagine Dragons', 'The Chainsmokers', 'Twenty One Pilots', 'Maroon 5',
+                    'Shawn Mendes', 'Kanye West', 'J. Cole', 'Future', 'Metro Boomin',
+                    'Sabrina Carpenter', 'Charli XCX', 'Tyler, The Creator', 'Frank Ocean', 'Lana Del Rey',
+                    'Arctic Monkeys', 'Tame Impala', 'Mac Miller', 'Khalid', 'Lizzo'
+                ];
+
+                try {
+                    // Fetch album art for multiple artists
+                    for (let i = 0; i < popularArtists.length; i++) {
+                        const artist = popularArtists[i];
+                        
+                        try {
+                            const response = await fetch(
+                                `${BACKEND_URL}/api/search-artists?q=${encodeURIComponent(artist)}`,
+                                { credentials: 'include' }
+                            );
+                            
+                            const data = await response.json();
+                            const artists = data.artists || data;
+                            
+                            if (artists && artists.length > 0 && artists[0].images && artists[0].images.length > 0) {
+                                const imageUrl = artists[0].images[0].url;
+                                const item = document.createElement('div');
+                                item.className = 'album-art-item';
+                                item.style.backgroundImage = `url('${imageUrl}')`;
+                                item.style.animationDelay = `${Math.random() * 5}s`;
+                                item.style.animationDuration = `${15 + Math.random() * 10}s`;
+                                albumArtGrid.appendChild(item);
+                            }
+                        } catch (err) {
+                            console.log(`Failed to fetch art for ${artist}`);
+                        }
+                        
+                        // Small delay to avoid rate limiting
+                        if (i % 5 === 0) await new Promise(r => setTimeout(r, 200));
+                    }
+                } catch (error) {
+                    console.error('Error populating album art:', error);
+                    // Fallback to placeholder images
+                    for(let i=0; i<40; i++) {
+                        const item = document.createElement('div');
+                        item.className = 'album-art-item';
+                        item.style.backgroundImage = `url('https://picsum.photos/seed/${i+10}/200')`;
+                        item.style.animationDelay = `${Math.random() * 5}s`;
+                        item.style.animationDuration = `${15 + Math.random() * 10}s`;
+                        albumArtGrid.appendChild(item);
+                    }
+                }
             }
+
+            // Update UI based on auth mode
+            function updateModeUI(mode) {
+                currentMode = mode;
+                
+                // Hide all banners first
+                demoModeBanner.classList.add('hidden');
+                userModeBanner.classList.add('hidden');
+                noAuthBanner.classList.add('hidden');
+                
+                // Show appropriate banner
+                if (mode === 'user') {
+                    userModeBanner.classList.remove('hidden');
+                    appSection.classList.remove('hidden');
+                } else if (mode === 'demo') {
+                    demoModeBanner.classList.remove('hidden');
+                    appSection.classList.remove('hidden');
+                } else {
+                    noAuthBanner.classList.remove('hidden');
+                    appSection.classList.add('hidden');
+                }
+            }
+
+            // Check authentication status on load
+            async function checkAuthStatus() {
+                try {
+                    const response = await fetch(`${BACKEND_URL}/api/auth-status`, {
+                        credentials: 'include'
+                    });
+                    const data = await response.json();
+                    updateModeUI(data.mode);
+                } catch (error) {
+                    console.error('Auth check error:', error);
+                    updateModeUI('none');
+                }
+            }
+
+            // Open Spotify login
+            function openLogin() {
+                const authWindow = window.open(
+                    `${BACKEND_URL}/login`,
+                    'Spotify Login',
+                    'width=600,height=700'
+                );
+
+                // Listen for auth success message
+                window.addEventListener('message', (event) => {
+                    if (event.data.type === 'spotify-auth-success') {
+                        checkAuthStatus();
+                        showMessage('Successfully logged in!', 'bg-green-500/20', 'text-green-400');
+                    }
+                });
+            }
+
+            // Login button handlers
+            loginButton.addEventListener('click', openLogin);
+            loginFromDemo.addEventListener('click', openLogin);
+
+            // Logout button handler
+            logoutButton.addEventListener('click', async () => {
+                try {
+                    await fetch(`${BACKEND_URL}/logout`, { credentials: 'include' });
+                    checkAuthStatus();
+                    selectedArtists.clear();
+                    renderArtistTokens();
+                    showMessage('Logged out. Switched to demo mode.', 'bg-blue-500/20', 'text-blue-400');
+                } catch (error) {
+                    console.error('Logout error:', error);
+                }
+            });
 
             songCountSlider.addEventListener('input', () => {
                 songCountValue.textContent = songCountSlider.value;
             });
 
-            // Artist Search using the real Backend
+            // Artist Search
             artistSearchInput.addEventListener('input', async (e) => {
                 const query = e.target.value.trim();
                 artistSuggestions.innerHTML = '';
                 
                 if (query.length > 1) {
                     try {
-                        const response = await fetch(`${BACKEND_URL}/search-artists?q=${encodeURIComponent(query)}`);
-                        const artists = await response.json();
+                        const response = await fetch(
+                            `${BACKEND_URL}/api/search-artists?q=${encodeURIComponent(query)}`,
+                            { credentials: 'include' }
+                        );
+
+                        const data = await response.json();
+                        const artists = data.artists || data;
 
                         if (artists && artists.length > 0) {
                             artists.forEach(artist => {
@@ -205,7 +396,7 @@
                 }
             });
 
-            // Final Generation call to the real Backend
+            // Generate Playlist
             generateButton.addEventListener('click', async () => {
                 const playlistName = playlistNameInput.value.trim();
                 const artists = Array.from(selectedArtists);
@@ -214,16 +405,17 @@
                 const songCount = songCountSlider.value;
 
                 if (!playlistName) return showMessage("Please name your playlist.", "bg-red-500/20", "text-red-400");
-                if (artists.length === 0) return showStatus("Select at least one artist.", true);
+                if (artists.length === 0) return showMessage("Select at least one artist.", "bg-red-500/20", "text-red-400");
 
                 showMessage("Generating your vibe...", "bg-blue-500/20", "text-blue-400");
                 generateButton.disabled = true;
                 resultLinkContainer.classList.add('hidden');
                 
                 try {
-                    const response = await fetch(`${BACKEND_URL}/generate`, {
+                    const response = await fetch(`${BACKEND_URL}/api/generate`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
                         body: JSON.stringify({
                             name: playlistName,
                             artists,
@@ -232,12 +424,20 @@
                             songCount: parseInt(songCount)
                         })
                     });
-                    
+
                     const data = await response.json();
 
                     if (response.ok) {
                         resultLink.href = data.url;
                         resultLink.textContent = `Open "${data.name}" on Spotify`;
+                        
+                        // Show different message based on mode
+                        if (data.mode === 'demo') {
+                            resultModeText.textContent = '✨ Demo playlist created! Login to save to your own Spotify account.';
+                        } else {
+                            resultModeText.textContent = '✓ Your playlist is ready!';
+                        }
+                        
                         resultLinkContainer.classList.remove('hidden');
                         showMessage("Playlist Ready!", "bg-green-500/20", "text-green-400");
                     } else {
@@ -259,6 +459,12 @@
                     setTimeout(() => messageBox.classList.add('hidden'), 5000);
                 }
             }
+
+            // Check auth on page load
+            checkAuthStatus();
+            
+            // Populate album art after checking auth
+            populateAlbumArt();
         });
     </script>
 </body>
