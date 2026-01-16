@@ -4,13 +4,13 @@ const fetch = require('node-fetch');
 const querystring = require('querystring');
 
 const app = express();
-const port = 8000;
+const port = 5500;
 
 const CLIENT_ID = 'a0e5a70475c642a4a68021b0c9dccb52';
 const CLIENT_SECRET = '38e19ec90c724ae7b0c7b0ce4fd86fc5';
-const REDIRECT_URI = 'http://127.0.0.1:8000/callback'; 
+const REDIRECT_URI = 'http://127.0.0.1:5500/callback'; 
 
-let SERVICE_REFRESH_TOKEN = 'AQCpNz1wbIaBNxbihrbdlHJvV_4hzhtiaqDtAs44krmb0EBAnTEidlyDnH6RqqfJt-Rp4BuPrDxFGvzwJ53zktNn_kUrGouAopAxTIGZlzkAh8dI68dwpT0vtOjRb_asbvE'; 
+const SERVICE_REFRESH_TOKEN = 'AQBDuYIVViaMSbm6V6zkB-7hx4dGelLj__TeQX9156sFN7-uvH2IvQwAv1K1y5W66fEJlpAmmoFr7piwcR5OM6H9u8YMk-hyD0MCsQDwaZKgxLWcjLNyI1kubv3cMhOIVVo'; 
 
 app.use(cors());
 app.use(express.json());
