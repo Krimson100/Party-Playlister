@@ -20,8 +20,8 @@
             width: 100%;
             height: 100%;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-            gap: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+            gap: 17px;
             z-index: -10;
         }
         .album-art-item {
@@ -206,16 +206,49 @@
             
             // Fetch and populate real album art from popular artists
             async function populateAlbumArt() {
+                const CACHE_KEY = 'spotify_album_art_cache';
+                const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+                
+                // Try to load from cache first
+                const cached = localStorage.getItem(CACHE_KEY);
+                if (cached) {
+                    try {
+                        const { timestamp, images } = JSON.parse(cached);
+                        const now = Date.now();
+                        
+                        // Check if cache is still valid
+                        if (now - timestamp < CACHE_DURATION) {
+                            console.log('Loading album art from cache');
+                            images.forEach(imageUrl => {
+                                const item = document.createElement('div');
+                                item.className = 'album-art-item';
+                                item.style.backgroundImage = `url('${imageUrl}')`;
+                                item.style.animationDelay = `${Math.random() * 5}s`;
+                                item.style.animationDuration = `${15 + Math.random() * 10}s`;
+                                albumArtGrid.appendChild(item);
+                            });
+                            return; // Exit early, we used cached data
+                        }
+                    } catch (e) {
+                        console.log('Cache invalid, fetching fresh data');
+                    }
+                }
+
+                // If no valid cache, fetch fresh data
+                console.log('Fetching fresh album art from Spotify');
                 const popularArtists = [
-                    'Taylor Swift', 'Drake', 'The Weeknd', 'Ariana Grande', 'Ed Sheeran',
+                    'Tyla', 'Drake', 'The Weeknd', 'Ariana Grande', 'Ed Sheeran',
                     'Billie Eilish', 'Post Malone', 'Dua Lipa', 'Travis Scott', 'SZA',
                     'Bad Bunny', 'Harry Styles', 'Olivia Rodrigo', 'Doja Cat', 'Kendrick Lamar',
                     'Bruno Mars', 'Rihanna', 'Beyoncé', 'Justin Bieber', 'Adele',
                     'Coldplay', 'Imagine Dragons', 'The Chainsmokers', 'Twenty One Pilots', 'Maroon 5',
                     'Shawn Mendes', 'Kanye West', 'J. Cole', 'Future', 'Metro Boomin',
                     'Sabrina Carpenter', 'Charli XCX', 'Tyler, The Creator', 'Frank Ocean', 'Lana Del Rey',
-                    'Arctic Monkeys', 'Tame Impala', 'Mac Miller', 'Khalid', 'Lizzo'
+                    'Arctic Monkeys', 'Tame Impala', 'Mac Miller', 'Khalid', 'J Cole',
+                    'Megan Thee Stallion', 'Lil Nas X', 'Camila Cabelllo'
                 ];
+
+                const fetchedImages = [];
 
                 try {
                     // Fetch album art for multiple artists
@@ -233,6 +266,8 @@
                             
                             if (artists && artists.length > 0 && artists[0].images && artists[0].images.length > 0) {
                                 const imageUrl = artists[0].images[0].url;
+                                fetchedImages.push(imageUrl);
+                                
                                 const item = document.createElement('div');
                                 item.className = 'album-art-item';
                                 item.style.backgroundImage = `url('${imageUrl}')`;
@@ -246,6 +281,15 @@
                         
                         // Small delay to avoid rate limiting
                         if (i % 5 === 0) await new Promise(r => setTimeout(r, 200));
+                    }
+                    
+                    // Save to cache
+                    if (fetchedImages.length > 0) {
+                        localStorage.setItem(CACHE_KEY, JSON.stringify({
+                            timestamp: Date.now(),
+                            images: fetchedImages
+                        }));
+                        console.log(`Cached ${fetchedImages.length} album covers`);
                     }
                 } catch (error) {
                     console.error('Error populating album art:', error);
