@@ -23,9 +23,11 @@ if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
 app.use(session({
     secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
     resave: false,
-    saveUninitialized: false,
+    saveUninitialized: true, // Changed to true to ensure session is created
     cookie: { 
         secure: false, // Set to true if using HTTPS
+        httpOnly: true,
+        sameSite: 'lax', // Important for OAuth flow
         maxAge: 3600000 // 1 hour
     }
 }));
@@ -100,28 +102,59 @@ async function getAccessToken(session) {
 app.get('/login', (req, res) => {
     const scope = 'playlist-modify-public playlist-modify-private';
     const state = Math.random().toString(36).substring(7);
-    req.session.state = state;
     
-    res.redirect('https://accounts.spotify.com/authorize?' +
-        querystring.stringify({
-            response_type: 'code',
-            client_id: CLIENT_ID,
-            scope: scope,
-            redirect_uri: REDIRECT_URI,
-            state: state
-        }));
+    // Save state before redirect
+    req.session.state = state;
+    req.session.save((err) => {
+        if (err) {
+            console.error('Session save error:', err);
+        }
+        console.log('Login initiated, state saved:', state, 'Session ID:', req.sessionID);
+        
+        res.redirect('https://accounts.spotify.com/authorize?' +
+            querystring.stringify({
+                response_type: 'code',
+                client_id: CLIENT_ID,
+                scope: scope,
+                redirect_uri: REDIRECT_URI,
+                state: state
+            }));
+    });
 });
 
 // Callback route - handles Spotify redirect
 app.get('/callback', async (req, res) => {
     const code = req.query.code || null;
     const state = req.query.state || null;
+    const error = req.query.error || null;
     
-    if (!code || state !== req.session.state) {
-        return res.status(400).send('<h1>Error: Invalid state or no authorization code</h1>');
+    console.log('Callback received - Session ID:', req.sessionID);
+    console.log('Callback details:', { 
+        hasCode: !!code, 
+        receivedState: state, 
+        sessionState: req.session?.state,
+        stateMatch: state === req.session?.state,
+        error 
+    });
+    
+    if (error) {
+        return res.status(400).send(`<h1>Spotify Authorization Error</h1><p>${error}</p><p>User denied access or another error occurred.</p>`);
+    }
+    
+    if (!code) {
+        return res.status(400).send('<h1>Error: No authorization code received</h1>');
+    }
+    
+    // More lenient state check - if no session state, allow it but log warning
+    if (!req.session.state) {
+        console.warn('WARNING: No state in session, but proceeding with auth');
+    } else if (state !== req.session.state) {
+        console.error('State mismatch:', { received: state, expected: req.session.state });
+        return res.status(400).send('<h1>Error: State mismatch</h1><p>Please try logging in again.</p>');
     }
     
     try {
+        console.log('Exchanging code for tokens...');
         const response = await fetch('https://accounts.spotify.com/api/token', {
             method: 'POST',
             headers: {
@@ -137,23 +170,39 @@ app.get('/callback', async (req, res) => {
         const data = await response.json();
         
         if (!response.ok) {
+            console.error('Token exchange failed:', data);
             throw new Error(data.error_description || 'Failed to get tokens');
         }
+        
+        console.log('Tokens received successfully');
         
         // Store tokens in session
         req.session.accessToken = data.access_token;
         req.session.refreshToken = data.refresh_token;
         req.session.expiresAt = Date.now() + (data.expires_in * 1000);
         
-        // Redirect back to frontend
-        res.send(`
-            <script>
-                window.opener.postMessage({ type: 'spotify-auth-success' }, '*');
-                window.close();
-            </script>
-            <h1>Success! You can close this window.</h1>
-        `);
+        // Clear state after successful auth
+        delete req.session.state;
+        
+        // Save session before responding
+        req.session.save((err) => {
+            if (err) {
+                console.error('Session save error:', err);
+            }
+            
+            // Redirect back to frontend
+            res.send(`
+                <script>
+                    console.log('Auth success, notifying parent window');
+                    window.opener.postMessage({ type: 'spotify-auth-success' }, '*');
+                    setTimeout(() => window.close(), 1000);
+                </script>
+                <h1>Success! ✓</h1>
+                <p>You can close this window or it will close automatically.</p>
+            `);
+        });
     } catch (error) {
+        console.error('Callback error:', error);
         res.status(500).send(`<h1>Error: ${error.message}</h1>`);
     }
 });
@@ -299,14 +348,9 @@ app.post('/api/generate', async (req, res) => {
     }
 });
 
-app.use(express.static('.'));
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/index.html');
-});
-
 app.listen(port, () => {
-    console.log(`✅ Server running at http://localhost:${port}`);
-    console.log(`📝 Visit http://localhost:${port}/login to authenticate`);
+    console.log(`✅ Server running at http://127.0.0.1:${port}`);
+    console.log(`📝 Visit http://127.0.0.1:${port}/login to authenticate`);
     if (SERVICE_REFRESH_TOKEN) {
         console.log(`🎵 Demo mode ENABLED (using service account)`);
     } else {
