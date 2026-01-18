@@ -23,10 +23,11 @@ if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
 app.use(session({
     secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
     resave: false,
-    saveUninitialized: false, // Changed to true to ensure session is created
+    saveUninitialized: true, // Changed to true to ensure session is created
     cookie: { 
         secure: false, // Set to true if using HTTPS
-        //  // Important for OAuth flow
+        httpOnly: true,
+        sameSite: 'lax', // Important for OAuth flow
         maxAge: 3600000 // 1 hour
     }
 }));
@@ -117,7 +118,7 @@ app.get('/login', (req, res) => {
                 scope: scope,
                 redirect_uri: REDIRECT_URI,
                 state: state,
-                show_dialog: true
+                show_dialog: true // Force Spotify to show account selection
             }));
     });
 });
@@ -346,6 +347,14 @@ app.post('/api/generate', async (req, res) => {
         console.error('Playlist generation error:', e);
         res.status(500).json({ error: 'Failed to generate playlist: ' + e.message });
     }
+});
+
+// Serve static files (CSS, JS, images, etc.)
+app.use(express.static(__dirname));
+
+// Serve index.html for root route
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/index.html');
 });
 
 app.listen(port, () => {
