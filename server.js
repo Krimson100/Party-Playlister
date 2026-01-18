@@ -350,7 +350,7 @@ app.post('/api/generate', async (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`✅ Server running at http://127.0.0.1:${port}`);
+    console.log(`✅ Server running at http://127.0.0.1:${port}/callback`);
     console.log(`📝 Visit http://127.0.0.1:${port}/login to authenticate`);
     if (SERVICE_REFRESH_TOKEN) {
         console.log(`🎵 Demo mode ENABLED (using service account)`);
