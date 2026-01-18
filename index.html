@@ -20,8 +20,8 @@
             width: 100%;
             height: 100%;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-            gap: 17px;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
             z-index: -10;
         }
         .album-art-item {
@@ -176,7 +176,8 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const BACKEND_URL = 'http://localhost:5500';
+            // Use the current domain (works for both local and deployed)
+            const BACKEND_URL = window.location.origin;
 
             const demoModeBanner = document.getElementById('demo-mode-banner');
             const userModeBanner = document.getElementById('user-mode-banner');
@@ -237,15 +238,14 @@
                 // If no valid cache, fetch fresh data
                 console.log('Fetching fresh album art from Spotify');
                 const popularArtists = [
-                    'Tyla', 'Drake', 'The Weeknd', 'Ariana Grande', 'Ed Sheeran',
+                    'Taylor Swift', 'Drake', 'The Weeknd', 'Ariana Grande', 'Ed Sheeran',
                     'Billie Eilish', 'Post Malone', 'Dua Lipa', 'Travis Scott', 'SZA',
                     'Bad Bunny', 'Harry Styles', 'Olivia Rodrigo', 'Doja Cat', 'Kendrick Lamar',
                     'Bruno Mars', 'Rihanna', 'Beyoncé', 'Justin Bieber', 'Adele',
                     'Coldplay', 'Imagine Dragons', 'The Chainsmokers', 'Twenty One Pilots', 'Maroon 5',
                     'Shawn Mendes', 'Kanye West', 'J. Cole', 'Future', 'Metro Boomin',
                     'Sabrina Carpenter', 'Charli XCX', 'Tyler, The Creator', 'Frank Ocean', 'Lana Del Rey',
-                    'Arctic Monkeys', 'Tame Impala', 'Mac Miller', 'Khalid', 'J Cole',
-                    'Megan Thee Stallion', 'Lil Nas X', 'Camila Cabelllo'
+                    'Arctic Monkeys', 'Tame Impala', 'Mac Miller', 'Khalid', 'Lizzo'
                 ];
 
                 const fetchedImages = [];
@@ -343,19 +343,39 @@
 
             // Open Spotify login
             function openLogin() {
+                console.log('Opening Spotify login popup...');
                 const authWindow = window.open(
                     `${BACKEND_URL}/login`,
                     'Spotify Login',
                     'width=600,height=700'
                 );
 
+                if (!authWindow) {
+                    showMessage('Please allow popups for this site', 'bg-red-500/20', 'text-red-400');
+                    return;
+                }
+
                 // Listen for auth success message
-                window.addEventListener('message', (event) => {
+                const messageHandler = (event) => {
+                    console.log('Message received:', event.data);
                     if (event.data.type === 'spotify-auth-success') {
+                        console.log('Auth successful!');
                         checkAuthStatus();
                         showMessage('Successfully logged in!', 'bg-green-500/20', 'text-green-400');
+                        window.removeEventListener('message', messageHandler);
                     }
-                });
+                };
+                
+                window.addEventListener('message', messageHandler);
+                
+                // Check if popup was closed without completing auth
+                const checkClosed = setInterval(() => {
+                    if (authWindow.closed) {
+                        clearInterval(checkClosed);
+                        console.log('Auth popup was closed');
+                        window.removeEventListener('message', messageHandler);
+                    }
+                }, 1000);
             }
 
             // Login button handlers

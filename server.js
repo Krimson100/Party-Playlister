@@ -23,11 +23,10 @@ if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
 app.use(session({
     secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
     resave: false,
-    saveUninitialized: true, // Changed to true to ensure session is created
+    saveUninitialized: false, // Changed to true to ensure session is created
     cookie: { 
         secure: false, // Set to true if using HTTPS
-        httpOnly: true,
-        sameSite: 'lax', // Important for OAuth flow
+        //  // Important for OAuth flow
         maxAge: 3600000 // 1 hour
     }
 }));
@@ -350,7 +349,7 @@ app.post('/api/generate', async (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`✅ Server running at http://127.0.0.1:${port}/callback`);
+    console.log(`✅ Server running at http://127.0.0.1:${port}`);
     console.log(`📝 Visit http://127.0.0.1:${port}/login to authenticate`);
     if (SERVICE_REFRESH_TOKEN) {
         console.log(`🎵 Demo mode ENABLED (using service account)`);
