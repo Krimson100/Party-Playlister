@@ -11,7 +11,6 @@ const port = process.env.PORT || 5500;
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const REDIRECT_URI = process.env.REDIRECT_URI;
-const SERVICE_REFRESH_TOKEN = process.env.SERVICE_REFRESH_TOKEN; // Your personal token for demo mode
 
 // Validate required environment variables
 if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
@@ -23,11 +22,11 @@ if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
 app.use(session({
     secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
     resave: false,
-    saveUninitialized: true, // Changed to true to ensure session is created
+    saveUninitialized: true,
     cookie: { 
         secure: false, // Set to true if using HTTPS
         httpOnly: true,
-        sameSite: 'lax', // Important for OAuth flow
+        sameSite: 'lax',
         maxAge: 3600000 // 1 hour
     }
 }));
@@ -38,64 +37,52 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Get access token - tries user token first, falls back to service token
-async function getAccessToken(session) {
-    // If user is logged in, use their token
-    if (session && session.accessToken && session.expiresAt && Date.now() < session.expiresAt) {
-        return { token: session.accessToken, mode: 'user' };
-    }
-    
-    // If user has a refresh token, refresh it
-    if (session && session.refreshToken) {
-        try {
-            const response = await fetch('https://accounts.spotify.com/api/token', {
-                method: 'POST',
-                headers: {
-                    'Authorization': 'Basic ' + (Buffer.from(CLIENT_ID + ':' + CLIENT_SECRET).toString('base64')),
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: querystring.stringify({
-                    grant_type: 'refresh_token',
-                    refresh_token: session.refreshToken
-                })
-            });
-            
-            const data = await response.json();
-            
-            if (response.ok) {
-                session.accessToken = data.access_token;
-                session.expiresAt = Date.now() + (data.expires_in * 1000);
-                return { token: data.access_token, mode: 'user' };
-            }
-        } catch (e) {
-            console.error('Error refreshing user token:', e);
-        }
-    }
-    
-    // Fall back to service token (demo mode)
-    if (SERVICE_REFRESH_TOKEN) {
-        const response = await fetch('https://accounts.spotify.com/api/token', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Basic ' + (Buffer.from(CLIENT_ID + ':' + CLIENT_SECRET).toString('base64')),
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: querystring.stringify({
-                grant_type: 'refresh_token',
-                refresh_token: SERVICE_REFRESH_TOKEN
-            })
+// Middleware to check if user is authenticated
+function requireAuth(req, res, next) {
+    if (!req.session.accessToken) {
+        return res.status(401).json({ 
+            error: 'Not authenticated',
+            needsAuth: true 
         });
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-            throw new Error(`Spotify API error: ${data.error_description || data.error}`);
-        }
-        
-        return { token: data.access_token, mode: 'demo' };
+    }
+    next();
+}
+
+// Refresh access token if needed
+async function getValidAccessToken(session) {
+    // If we have a valid access token, use it
+    if (session.accessToken && session.expiresAt && Date.now() < session.expiresAt) {
+        return session.accessToken;
     }
     
-    throw new Error('No authentication available. Please log in or configure SERVICE_REFRESH_TOKEN.');
+    // Otherwise, refresh it
+    if (!session.refreshToken) {
+        throw new Error('No refresh token available');
+    }
+    
+    const response = await fetch('https://accounts.spotify.com/api/token', {
+        method: 'POST',
+        headers: {
+            'Authorization': 'Basic ' + (Buffer.from(CLIENT_ID + ':' + CLIENT_SECRET).toString('base64')),
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: querystring.stringify({
+            grant_type: 'refresh_token',
+            refresh_token: session.refreshToken
+        })
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+        throw new Error(`Spotify API error: ${data.error_description || data.error}`);
+    }
+    
+    // Update session with new token
+    session.accessToken = data.access_token;
+    session.expiresAt = Date.now() + (data.expires_in * 1000);
+    
+    return data.access_token;
 }
 
 // Login route - redirects to Spotify auth
@@ -146,7 +133,7 @@ app.get('/callback', async (req, res) => {
         return res.status(400).send('<h1>Error: No authorization code received</h1>');
     }
     
-    // More lenient state check - if no session state, allow it but log warning
+    // More lenient state check
     if (!req.session.state) {
         console.warn('WARNING: No state in session, but proceeding with auth');
     } else if (state !== req.session.state) {
@@ -217,22 +204,19 @@ app.get('/logout', (req, res) => {
 // Check auth status
 app.get('/api/auth-status', (req, res) => {
     const hasUserAuth = !!(req.session && req.session.accessToken && req.session.expiresAt && Date.now() < req.session.expiresAt);
-    const hasDemoMode = !!SERVICE_REFRESH_TOKEN;
     
-    console.log('Auth status check:', { hasUserAuth, hasDemoMode, hasSession: !!req.session });
+    console.log('Auth status check:', { hasUserAuth, hasSession: !!req.session });
     
     res.json({ 
         authenticated: hasUserAuth,
-        mode: hasUserAuth ? 'user' : (hasDemoMode ? 'demo' : 'none'),
-        expiresAt: req.session?.expiresAt,
-        demoAvailable: hasDemoMode
+        expiresAt: req.session?.expiresAt
     });
 });
 
-// Search artists
-app.get('/api/search-artists', async (req, res) => {
+// Search artists (requires auth)
+app.get('/api/search-artists', requireAuth, async (req, res) => {
     try {
-        const { token, mode } = await getAccessToken(req.session);
+        const token = await getValidAccessToken(req.session);
         const q = req.query.q;
         
         if (!q) {
@@ -249,18 +233,15 @@ app.get('/api/search-artists', async (req, res) => {
             throw new Error(data.error?.message || 'Spotify API error');
         }
         
-        res.json({
-            artists: data.artists ? data.artists.items : [],
-            mode: mode // Let frontend know if using demo or user mode
-        });
+        res.json(data.artists ? data.artists.items : []);
     } catch (e) {
         console.error('Search error:', e);
         res.status(500).json({ error: e.message });
     }
 });
 
-// Generate playlist
-app.post('/api/generate', async (req, res) => {
+// Generate playlist (requires auth)
+app.post('/api/generate', requireAuth, async (req, res) => {
     const { name, artists, songCount, startYear, endYear } = req.body;
     
     // Validation
@@ -273,7 +254,7 @@ app.post('/api/generate', async (req, res) => {
     }
     
     try {
-        const { token, mode } = await getAccessToken(req.session);
+        const token = await getValidAccessToken(req.session);
         
         let allTracks = [];
         for (const artist of artists) {
@@ -340,8 +321,7 @@ app.post('/api/generate', async (req, res) => {
 
         res.json({ 
             url: playlistData.external_urls.spotify, 
-            name: playlistData.name,
-            mode: mode // Let frontend know if playlist was created in demo or user mode
+            name: playlistData.name
         });
     } catch (e) {
         console.error('Playlist generation error:', e);
@@ -349,7 +329,7 @@ app.post('/api/generate', async (req, res) => {
     }
 });
 
-// Serve static files (CSS, JS, images, etc.)
+// Serve static files
 app.use(express.static(__dirname));
 
 // Serve index.html for root route
@@ -357,12 +337,8 @@ app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html');
 });
 
+
 app.listen(port, () => {
     console.log(`✅ Server running at http://127.0.0.1:${port}`);
     console.log(`📝 Visit http://127.0.0.1:${port}/login to authenticate`);
-    if (SERVICE_REFRESH_TOKEN) {
-        console.log(`🎵 Demo mode ENABLED (using service account)`);
-    } else {
-        console.log(`⚠️  Demo mode DISABLED (no SERVICE_REFRESH_TOKEN found)`);
-    }
 });
